@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Debug / local
+error.txt
+*.log
+
+# Stream Deck launchers (local use only)
+streamdeck/
+
+# macOS
+.DS_Store
