@@ -1,0 +1,53 @@
+name: Issue Forwarder
+
+on:
+  issues:
+    types: [opened, edited, labeled, reopened]
+
+permissions:
+  issues: read
+
+jobs:
+  forward:
+    runs-on: ubuntu-latest
+    # Only trusted collaborators, members, or the repo owner can trigger the agent
+    if: |
+      github.event.issue.author_association == 'OWNER' ||
+      github.event.issue.author_association == 'MEMBER' ||
+      github.event.issue.author_association == 'COLLABORATOR'
+    steps:
+      - name: Forward issue to claude agent
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_AGENT_TOKEN }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          REPO_FULL: ${{ github.event.repository.full_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_LABELS_JSON: ${{ toJSON(github.event.issue.labels) }}
+        run: |
+          ISSUE_LABELS=$(jq -r '[.[].name] | join(",")' <<< "$ISSUE_LABELS_JSON")
+
+          PAYLOAD=$(jq -n \
+            --arg event_type "process-issue" \
+            --arg repo_name  "$REPO_NAME" \
+            --arg repo_full  "$REPO_FULL" \
+            --argjson issue_number "$ISSUE_NUMBER" \
+            --arg issue_title  "$ISSUE_TITLE" \
+            --arg issue_body   "$ISSUE_BODY" \
+            --arg issue_labels "$ISSUE_LABELS" \
+            '{
+              event_type: $event_type,
+              client_payload: {
+                repo_name:     $repo_name,
+                repo_full:     $repo_full,
+                issue_number:  $issue_number,
+                issue_title:   $issue_title,
+                issue_body:    $issue_body,
+                issue_labels:  $issue_labels
+              }
+            }')
+
+          gh api repos/joseluislucio/agent-config/dispatches \
+            --method POST \
+            --input - <<< "$PAYLOAD"
